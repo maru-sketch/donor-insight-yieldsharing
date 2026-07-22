@@ -58,3 +58,17 @@ test("shows monthly acquisition counts broken down by channel", async () => {
   assert.match(page, /monthYearLabel\(month\)/);
   assert.match(page, /월 합계/);
 });
+
+test("lets the user choose only the safe data columns they want to see", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /data-testid="column-viewer"/);
+  assert.match(page, /데이터 보기 설정/);
+  assert.match(page, /selectedColumns/);
+  assert.match(page, /납부일/);
+  assert.match(page, /납부항목/);
+  assert.match(page, /인입채널/);
+  assert.match(page, /납부금액/);
+  assert.match(page, /data-testid="selected-data-table"/);
+  const options = page.match(/const COLUMN_OPTIONS[\s\S]*?\n\];/)?.[0] ?? "";
+  assert.doesNotMatch(options, /회원명|연락처|입금계좌/);
+});

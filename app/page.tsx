@@ -9,6 +9,8 @@ type DonationRow = {
   amount: number;
 };
 
+type SafeColumnKey = keyof DonationRow;
+
 type ParsedCsv = {
   rows: DonationRow[];
   detectedHeaders: string[];
@@ -48,6 +50,15 @@ const HEADER_ALIASES = {
   channel: ["인입채널", "유입채널", "채널", "channel"],
   amount: ["납부금액", "후원금액", "기부금액", "금액", "amount"],
 };
+
+const COLUMN_OPTIONS: { key: SafeColumnKey; label: string }[] = [
+  { key: "date", label: "납부일" },
+  { key: "item", label: "납부항목" },
+  { key: "channel", label: "인입채널" },
+  { key: "amount", label: "납부금액" },
+];
+
+const DATA_PAGE_SIZE = 20;
 
 function splitCsvLine(line: string) {
   const cells: string[] = [];
@@ -143,6 +154,10 @@ function formatWon(value: number) {
   return `${new Intl.NumberFormat("ko-KR").format(Math.round(value))}원`;
 }
 
+function formatColumnValue(row: DonationRow, key: SafeColumnKey) {
+  return key === "amount" ? formatWon(row.amount) : String(row[key]);
+}
+
 function monthLabel(value: string) {
   const match = value.match(/(\d{4})[-/.](\d{1,2})/);
   return match ? `${Number(match[2])}월` : value.slice(0, 7);
@@ -207,6 +222,8 @@ export default function Home() {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [savedMessage, setSavedMessage] = useState("");
   const [detectedInfo, setDetectedInfo] = useState<DetectedInfo | null>(null);
+  const [selectedColumns, setSelectedColumns] = useState<SafeColumnKey[]>(["date", "amount"]);
+  const [dataPage, setDataPage] = useState(0);
 
   const summary = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + row.amount, 0);
@@ -247,6 +264,20 @@ export default function Home() {
     1,
   );
 
+  const selectedColumnOptions = COLUMN_OPTIONS.filter(({ key }) => selectedColumns.includes(key));
+  const totalDataPages = Math.max(Math.ceil(rows.length / DATA_PAGE_SIZE), 1);
+  const visibleDataRows = rows.slice(dataPage * DATA_PAGE_SIZE, (dataPage + 1) * DATA_PAGE_SIZE);
+
+  const toggleColumn = (key: SafeColumnKey) => {
+    setSelectedColumns((current) => {
+      const next = current.includes(key)
+        ? current.length === 1 ? current : current.filter((column) => column !== key)
+        : [...current, key];
+      return COLUMN_OPTIONS.filter((option) => next.includes(option.key)).map((option) => option.key);
+    });
+    setDataPage(0);
+  };
+
   const applyData = (text: string, name: string, encoding = "UTF-8") => {
     try {
       const parsed = parseCsv(text);
@@ -256,6 +287,7 @@ export default function Home() {
       setDetectedInfo({ headers: parsed.detectedHeaders, encoding, missingChannelCount: parsed.missingChannelCount });
       setError("");
       setSavedMessage("");
+      setDataPage(0);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "파일을 분석하지 못했습니다.");
       setRows([]);
@@ -470,6 +502,63 @@ export default function Home() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </article>
+
+          <article className="column-viewer-card" data-testid="column-viewer">
+            <div className="card-heading">
+              <div><span>맞춤 데이터 보기</span><h3>데이터 보기 설정</h3></div>
+              <span className="unit">현재 {selectedColumns.length}개 열 · 전체 {rows.length}건</span>
+            </div>
+            <p className="matrix-description">확인하고 싶은 열만 선택하세요. 성명·연락처·계좌 등 민감한 열은 선택 목록과 화면에 나타나지 않습니다.</p>
+
+            <fieldset className="column-picker">
+              <legend className="sr-only">표시할 데이터 열 선택</legend>
+              {COLUMN_OPTIONS.map(({ key, label }) => {
+                const isSelected = selectedColumns.includes(key);
+                return (
+                  <label className={`column-toggle ${isSelected ? "is-selected" : ""}`} key={key}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={isSelected && selectedColumns.length === 1}
+                      onChange={() => toggleColumn(key)}
+                    />
+                    <span aria-hidden="true">{isSelected ? "✓" : "+"}</span>
+                    {label}
+                  </label>
+                );
+              })}
+            </fieldset>
+
+            <div className="selected-table-scroll">
+              <table
+                className="selected-data-table"
+                data-testid="selected-data-table"
+                style={{ minWidth: `${Math.max(selectedColumns.length * 180, 320)}px` }}
+              >
+                <caption className="sr-only">선택한 열만 표시한 후원 데이터</caption>
+                <thead>
+                  <tr>{selectedColumnOptions.map(({ key, label }) => <th scope="col" key={key}>{label}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {visibleDataRows.map((row, index) => (
+                    <tr key={`${dataPage}-${index}`}>
+                      {selectedColumnOptions.map(({ key }) => (
+                        <td className={key === "amount" ? "amount-cell" : undefined} key={key}>{formatColumnValue(row, key)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="data-pagination" aria-label="데이터 페이지 이동">
+              <span>{dataPage + 1} / {totalDataPages} 페이지 · 한 번에 {DATA_PAGE_SIZE}건</span>
+              <div>
+                <button type="button" className="outline-button" disabled={dataPage === 0} onClick={() => setDataPage((page) => Math.max(page - 1, 0))}>이전</button>
+                <button type="button" className="outline-button" disabled={dataPage >= totalDataPages - 1} onClick={() => setDataPage((page) => Math.min(page + 1, totalDataPages - 1))}>다음</button>
+              </div>
             </div>
           </article>
 
