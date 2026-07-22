@@ -73,6 +73,20 @@ button { cursor: pointer; }
 .metric-card strong { font-size: clamp(26px, 3vw, 40px); letter-spacing: -0.04em; }
 .metric-card small { color: #929a95; font-size: 11px; }
 
+.retention-card { margin-bottom: 14px; padding: 28px; border: 1px solid #bfd9d0; border-radius: 5px; background: linear-gradient(120deg, #f4faf7, var(--green-soft)); }
+.retention-grid { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; margin-top: 24px; }
+.retention-primary, .retention-stat { min-height: 138px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #cbded5; border-radius: 4px; background: rgba(255,255,255,.78); }
+.retention-primary { background: var(--green); color: white; border-color: var(--green); }
+.retention-primary span, .retention-stat span { color: var(--muted); font-size: 12px; font-weight: 750; }
+.retention-primary span { color: #c9ddd7; }
+.retention-primary strong, .retention-stat strong { font-size: clamp(27px, 3.2vw, 42px); letter-spacing: -.045em; }
+.retention-primary small, .retention-stat small { color: #89958f; font-size: 11px; line-height: 1.45; }
+.retention-primary small { color: #c9ddd7; }
+.retention-track { height: 9px; margin-top: 18px; overflow: hidden; border-radius: 999px; background: #d9e5e0; }
+.retention-track div { height: 100%; border-radius: inherit; background: var(--orange); }
+.retention-formula, .retention-empty { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.retention-empty { padding: 18px 20px; border-radius: 4px; background: rgba(255,255,255,.7); }
+
 .chart-grid { display: grid; grid-template-columns: 1.35fr .85fr; gap: 14px; }
 .chart-card { min-height: 410px; padding: 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); }
 .card-heading { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
@@ -159,6 +173,7 @@ button { cursor: pointer; }
   .hero-copy { max-width: 720px; }
   .metric-grid, .chart-grid { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: repeat(3, 1fr); }
+  .retention-grid { grid-template-columns: repeat(3, 1fr); }
   .insight-grid { grid-template-columns: 1fr; }
   .insight-card { min-height: 300px; }
   .insight-heading { align-items: flex-start; flex-direction: column; }
@@ -180,6 +195,8 @@ button { cursor: pointer; }
   .detected-columns { align-items: flex-start; flex-direction: column; }
   .detected-tags { justify-content: flex-start; }
   .metric-grid { grid-template-columns: 1fr; }
+  .retention-card { padding: 20px; }
+  .retention-grid { grid-template-columns: 1fr; }
   .metric-card { min-height: 132px; }
   .chart-card { padding: 20px; min-height: 380px; overflow: hidden; }
   .monthly-channel-card { min-height: 0; }

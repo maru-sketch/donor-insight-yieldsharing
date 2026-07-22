@@ -1,26 +1,32 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
+import { calculateRetention } from "./retention.mjs";
 
 type DonationRow = {
   date: string;
   item: string;
   channel: string;
   amount: number;
+  memberKey?: string;
+  startDate?: string;
+  endDate?: string;
 };
 
-type SafeColumnKey = keyof DonationRow;
+type SafeColumnKey = "date" | "item" | "channel" | "amount";
 
 type ParsedCsv = {
   rows: DonationRow[];
   detectedHeaders: string[];
   missingChannelCount: number;
+  retentionReady: boolean;
 };
 
 type DetectedInfo = {
   headers: string[];
   encoding: string;
   missingChannelCount: number;
+  retentionReady: boolean;
 };
 
 type Insight = {
@@ -30,25 +36,28 @@ type Insight = {
   tone: "orange" | "green" | "ink";
 };
 
-const SAMPLE_CSV = `납부일,납부항목,인입채널,납부금액
-2026-01-12,정기후원,홈페이지,30000
-2026-01-18,일시후원,SNS,50000
-2026-02-03,정기후원,홈페이지,30000
-2026-02-14,일시후원,행사,120000
-2026-03-05,정기후원,홈페이지,30000
-2026-03-19,기업후원,소개,300000
-2026-04-02,정기후원,홈페이지,30000
-2026-04-11,일시후원,SNS,70000
-2026-05-06,정기후원,홈페이지,30000
-2026-05-22,일시후원,SNS,100000
-2026-06-08,정기후원,홈페이지,30000
-2026-06-20,기업후원,소개,450000`;
+const SAMPLE_CSV = `회원번호,시작년월,납부종료일,납부일,납부항목,인입채널,납부금액
+S001,2026-01,,2026-01-12,정기후원,홈페이지,30000
+S002,2026-01,2026-03-31,2026-01-18,일시후원,SNS,50000
+S001,2026-01,,2026-02-03,정기후원,홈페이지,30000
+S003,2026-02,,2026-02-14,일시후원,행사,120000
+S001,2026-01,,2026-03-05,정기후원,홈페이지,30000
+S004,2026-03,,2026-03-19,기업후원,소개,300000
+S001,2026-01,,2026-04-02,정기후원,홈페이지,30000
+S005,2026-04,2026-05-10,2026-04-11,일시후원,SNS,70000
+S001,2026-01,,2026-05-06,정기후원,홈페이지,30000
+S006,2026-05,,2026-05-22,일시후원,SNS,100000
+S001,2026-01,,2026-06-08,정기후원,홈페이지,30000
+S007,2026-06,,2026-06-20,기업후원,소개,450000`;
 
 const HEADER_ALIASES = {
   date: ["납부일", "납부일자", "결제일", "date"],
   item: ["납부항목", "후원유형", "기부유형", "item"],
   channel: ["인입채널", "유입채널", "채널", "channel"],
   amount: ["납부금액", "후원금액", "기부금액", "금액", "amount"],
+  memberKey: ["회원번호", "후원자번호", "후원자id", "memberid", "donorid"],
+  startDate: ["시작년월", "후원시작일", "후원시작년월", "가입일", "startdate"],
+  endDate: ["납부종료일", "후원중단일", "후원종료일", "종료년월", "enddate"],
 };
 
 const COLUMN_OPTIONS: { key: SafeColumnKey; label: string }[] = [
@@ -117,6 +126,11 @@ function parseCsv(text: string): ParsedCsv {
     channel: findColumn(headers, HEADER_ALIASES.channel),
     amount: findColumn(headers, HEADER_ALIASES.amount),
   };
+  const retentionIndexes = {
+    memberKey: findColumn(headers, HEADER_ALIASES.memberKey),
+    startDate: findColumn(headers, HEADER_ALIASES.startDate),
+    endDate: findColumn(headers, HEADER_ALIASES.endDate),
+  };
   const missing = Object.entries(indexes)
     .filter(([, index]) => index < 0)
     .map(([key]) => ({ date: "납부일", item: "납부항목", channel: "인입채널", amount: "납부금액" })[key as keyof typeof indexes]);
@@ -129,6 +143,9 @@ function parseCsv(text: string): ParsedCsv {
       item: cells[indexes.item]?.trim() ?? "",
       channel: channel || "채널 미입력",
       amount: parseAmount(cells[indexes.amount] ?? ""),
+      memberKey: retentionIndexes.memberKey >= 0 ? cells[retentionIndexes.memberKey]?.trim() ?? "" : "",
+      startDate: retentionIndexes.startDate >= 0 ? cells[retentionIndexes.startDate]?.trim() ?? "" : "",
+      endDate: retentionIndexes.endDate >= 0 ? cells[retentionIndexes.endDate]?.trim() ?? "" : "",
     };
   }).filter((row) => row.date && row.item && Number.isFinite(row.amount) && row.amount >= 0);
   const missingChannelCount = rows.filter((row) => row.channel === "채널 미입력").length;
@@ -138,6 +155,7 @@ function parseCsv(text: string): ParsedCsv {
     rows,
     detectedHeaders: [headers[indexes.date], headers[indexes.item], headers[indexes.channel], headers[indexes.amount]],
     missingChannelCount,
+    retentionReady: Object.values(retentionIndexes).every((index) => index >= 0),
   };
 }
 
@@ -152,6 +170,10 @@ async function decodeCsvFile(file: File) {
 
 function formatWon(value: number) {
   return `${new Intl.NumberFormat("ko-KR").format(Math.round(value))}원`;
+}
+
+function formatDateLabel(value: string) {
+  return value.replace(/-/g, ".");
 }
 
 function formatColumnValue(row: DonationRow, key: SafeColumnKey) {
@@ -230,6 +252,8 @@ export default function Home() {
     return { total, average: rows.length ? total / rows.length : 0, count: rows.length };
   }, [rows]);
 
+  const retention = useMemo(() => calculateRetention(rows), [rows]);
+
   const monthly = useMemo(() => {
     const map = new Map<string, number>();
     rows.forEach((row) => map.set(row.date.slice(0, 7), (map.get(row.date.slice(0, 7)) ?? 0) + row.amount));
@@ -284,7 +308,7 @@ export default function Home() {
       setRows(parsed.rows);
       setInsights(buildInsights(parsed.rows));
       setFileName(name);
-      setDetectedInfo({ headers: parsed.detectedHeaders, encoding, missingChannelCount: parsed.missingChannelCount });
+      setDetectedInfo({ headers: parsed.detectedHeaders, encoding, missingChannelCount: parsed.missingChannelCount, retentionReady: parsed.retentionReady });
       setError("");
       setSavedMessage("");
       setDataPage(0);
@@ -336,6 +360,11 @@ export default function Home() {
       `납부 총액: ${formatWon(summary.total)}`,
       `평균 납부액: ${formatWon(summary.average)}`,
       `분석 건수: ${summary.count}건`,
+      ...(retention ? [
+        `평균 후원 유지율: ${retention.retentionRate}%`,
+        `평균 후원기간: ${retention.averageMonths}개월`,
+        `유지율 기준일: ${retention.asOf}`,
+      ] : []),
       "",
       ...insights.flatMap((insight, index) => [`${index + 1}. ${insight.title}`, insight.body, ""]),
       "안내: 이 보고서는 브라우저 내 패턴 분석으로 생성된 초안이며, 전략 반영 전 담당자 검토가 필요합니다.",
@@ -385,7 +414,7 @@ export default function Home() {
         <div className="upload-panel" aria-labelledby="upload-title">
           <div className="step-label">STEP 01</div>
           <h2 id="upload-title">데이터를 불러오세요</h2>
-          <p>열 이름을 직접 바꾸지 않아도 됩니다. 납부일·납부항목·인입채널·납부금액을 자동으로 찾습니다.</p>
+          <p>열 이름을 직접 바꾸지 않아도 됩니다. 납부일·납부항목·인입채널·납부금액을 자동으로 찾습니다. 회원번호·시작년월·납부종료일이 있으면 유지율도 계산합니다.</p>
           <div
             className={`dropzone ${isDragging ? "is-dragging" : ""}`}
             onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
@@ -403,7 +432,7 @@ export default function Home() {
           {error && <div className="error-message" role="alert" data-testid="upload-error"><strong>파일을 확인해 주세요</strong><span>{error}</span></div>}
           <details className="privacy-guide">
             <summary>민감정보를 안전하게 준비하는 방법</summary>
-            <p>가능하면 성명·연락처 열을 삭제하거나 마스킹하세요. 포함되어 있어도 이 앱은 해당 열을 분석·표시·저장하지 않습니다. 원본 행은 브라우저를 닫으면 사라집니다.</p>
+            <p>가능하면 성명·연락처 열을 삭제하거나 마스킹하세요. 포함되어 있어도 이 앱은 해당 열을 분석·표시·저장하지 않습니다. 회원번호는 중복 후원자 구분에만 브라우저 안에서 잠시 사용하며 화면·저장·리포트에 남기지 않습니다. 원본 행은 브라우저를 닫으면 사라집니다.</p>
           </details>
         </div>
       </section>
@@ -422,10 +451,11 @@ export default function Home() {
             <div className="detected-columns" data-testid="detected-columns">
               <div>
                 <strong>필수 열을 자동으로 찾았습니다</strong>
-                <span>{detectedInfo.encoding} · 성명·회원번호·계좌 등 다른 열은 분석하지 않습니다.</span>
+                <span>{detectedInfo.encoding} · 성명·계좌는 분석하지 않습니다. 회원번호는 중복 후원자 구분에만 사용합니다.</span>
               </div>
               <div className="detected-tags" aria-label="자동 인식된 필수 열">
                 {detectedInfo.headers.map((header) => <span key={header}>{header}</span>)}
+                {detectedInfo.retentionReady && <span>유지율 계산 열 확인</span>}
                 {detectedInfo.missingChannelCount > 0 && <span className="notice">채널 미입력 {detectedInfo.missingChannelCount}건 별도 분류</span>}
               </div>
             </div>
@@ -436,6 +466,40 @@ export default function Home() {
             <article className="metric-card"><span>평균 납부액</span><strong>{formatWon(summary.average)}</strong><small>1건당 평균 금액</small></article>
             <article className="metric-card"><span>분석 건수</span><strong>{summary.count}건</strong><small>유효한 납부 데이터</small></article>
           </div>
+
+          <article className="retention-card" data-testid="retention-summary">
+            <div className="card-heading">
+              <div><span>후원 관계 분석</span><h3>후원자 유지 현황</h3></div>
+              <span className="unit">{retention ? `${formatDateLabel(retention.asOf)} 기준` : "필수 열 확인 필요"}</span>
+            </div>
+            {retention ? (
+              <>
+                <div className="retention-grid">
+                  <div className="retention-primary">
+                    <span>평균 후원 유지율</span>
+                    <strong>{retention.retentionRate}%</strong>
+                    <small>유지 {retention.retainedDonors}명 / 계산 대상 {retention.eligibleDonors}명</small>
+                  </div>
+                  <div className="retention-stat">
+                    <span>평균 후원기간</span>
+                    <strong>{retention.averageMonths}개월</strong>
+                    <small>시작년월부터 중단일 또는 기준일까지</small>
+                  </div>
+                  <div className="retention-stat">
+                    <span>후원 중단</span>
+                    <strong>{retention.endedDonors}명</strong>
+                    <small>모든 후원 종료일이 기준일 이전인 후원자</small>
+                  </div>
+                </div>
+                <div className="retention-track" role="img" aria-label={`평균 후원 유지율 ${retention.retentionRate}%`}>
+                  <div style={{ width: `${retention.retentionRate}%` }} />
+                </div>
+                <p className="retention-formula">유지율 = 종료일이 없거나 기준일과 같거나 이후인 후원자 ÷ 회원번호와 시작년월을 확인할 수 있는 후원자. 평균 기간은 시작년월의 첫날을 기준으로 계산한 근사값입니다.</p>
+              </>
+            ) : (
+              <p className="retention-empty">유지율을 계산하려면 CSV에 회원번호·시작년월·납부종료일 열이 필요합니다. 다른 분석 결과는 그대로 사용할 수 있습니다.</p>
+            )}
+          </article>
 
           <div className="chart-grid">
             <article className="chart-card" data-testid="monthly-chart">

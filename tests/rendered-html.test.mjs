@@ -47,7 +47,9 @@ test("auto-detects the supplied Korean CSV shape without storing private columns
   assert.match(page, /채널 미입력/);
   assert.match(page, /인입채널.*먼저 보완하세요/);
   assert.match(page, /data-testid="detected-columns"/);
-  assert.doesNotMatch(page, /회원명.*DonationRow|회원번호.*DonationRow|입금계좌.*DonationRow/s);
+  const donationRow = page.match(/type DonationRow = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  assert.doesNotMatch(donationRow, /memberName|contact|account|회원명|입금계좌/);
+  assert.doesNotMatch(page, /localStorage\.setItem\([^\n]*memberKey/);
 });
 
 test("shows monthly acquisition counts broken down by channel", async () => {
@@ -71,4 +73,28 @@ test("lets the user choose only the safe data columns they want to see", async (
   assert.match(page, /data-testid="selected-data-table"/);
   const options = page.match(/const COLUMN_OPTIONS[\s\S]*?\n\];/)?.[0] ?? "";
   assert.doesNotMatch(options, /회원명|연락처|입금계좌/);
+});
+
+test("calculates donor retention from start and stop dates without exposing donor ids", async () => {
+  const { calculateRetention } = await import("../app/retention.mjs");
+  const retention = calculateRetention([
+    { memberKey: "A", startDate: "2026-01", endDate: "", date: "2026-07-22" },
+    { memberKey: "B", startDate: "2026-02", endDate: "2026-04-15", date: "2026-04-15" },
+    { memberKey: "C", startDate: "2026-03", endDate: "2026-12", date: "2026-07-10" },
+  ]);
+
+  assert.equal(retention.eligibleDonors, 3);
+  assert.equal(retention.retainedDonors, 2);
+  assert.equal(retention.endedDonors, 1);
+  assert.equal(retention.retentionRate, 66.7);
+  assert.equal(retention.asOf, "2026-07-22");
+  assert.ok(retention.averageMonths > 0);
+  assert.equal(calculateRetention([{ date: "2026-07-22" }]), null);
+
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /data-testid="retention-summary"/);
+  assert.match(page, /평균 후원 유지율/);
+  assert.match(page, /평균 후원기간/);
+  assert.match(page, /회원번호는 중복 후원자 구분에만/);
+  assert.doesNotMatch(page, /\{row\.memberKey\}/);
 });
