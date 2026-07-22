@@ -38,3 +38,14 @@ test("keeps the TEST-01~03 interaction contracts in the product source", async (
   assert.match(page, /document\.body\.appendChild\(anchor\)/);
   assert.match(page, /anchor\.click\(\)/);
 });
+
+test("auto-detects the supplied Korean CSV shape without storing private columns", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /TextDecoder\("utf-8", \{ fatal: true \}\)/);
+  assert.match(page, /TextDecoder\("euc-kr"\)/);
+  assert.match(page, /자동으로 찾습니다/);
+  assert.match(page, /채널 미입력/);
+  assert.match(page, /인입채널.*먼저 보완하세요/);
+  assert.match(page, /data-testid="detected-columns"/);
+  assert.doesNotMatch(page, /회원명.*DonationRow|회원번호.*DonationRow|입금계좌.*DonationRow/s);
+});

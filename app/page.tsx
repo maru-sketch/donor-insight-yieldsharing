@@ -9,6 +9,18 @@ type DonationRow = {
   amount: number;
 };
 
+type ParsedCsv = {
+  rows: DonationRow[];
+  detectedHeaders: string[];
+  missingChannelCount: number;
+};
+
+type DetectedInfo = {
+  headers: string[];
+  encoding: string;
+  missingChannelCount: number;
+};
+
 type Insight = {
   eyebrow: string;
   title: string;
@@ -68,10 +80,26 @@ function findColumn(headers: string[], aliases: string[]) {
   return headers.findIndex((header) => normalizedAliases.includes(normalizeHeader(header)));
 }
 
-function parseCsv(text: string): DonationRow[] {
+function findHeaderLine(lines: string[]) {
+  const candidates = lines.slice(0, 10).map((line, index) => {
+    const headers = splitCsvLine(line);
+    const score = Object.values(HEADER_ALIASES)
+      .filter((aliases) => findColumn(headers, aliases) >= 0).length;
+    return { index, score };
+  });
+  return candidates.sort((a, b) => b.score - a.score)[0]?.index ?? 0;
+}
+
+function parseAmount(value: string) {
+  const cleaned = value.replace(/[^0-9.-]/g, "");
+  return cleaned ? Number(cleaned) : Number.NaN;
+}
+
+function parseCsv(text: string): ParsedCsv {
   const lines = text.replace(/\r/g, "").split("\n").filter((line) => line.trim());
   if (lines.length < 2) throw new Error("헤더와 데이터 행이 있는 CSV 파일을 선택해 주세요.");
-  const headers = splitCsvLine(lines[0]);
+  const headerLine = findHeaderLine(lines);
+  const headers = splitCsvLine(lines[headerLine]);
   const indexes = {
     date: findColumn(headers, HEADER_ALIASES.date),
     item: findColumn(headers, HEADER_ALIASES.item),
@@ -83,15 +111,33 @@ function parseCsv(text: string): DonationRow[] {
     .map(([key]) => ({ date: "납부일", item: "납부항목", channel: "인입채널", amount: "납부금액" })[key as keyof typeof indexes]);
   if (missing.length) throw new Error(`필수 열을 찾지 못했습니다: ${missing.join(", ")}. 열 이름을 확인해 주세요.`);
 
-  const rows = lines.slice(1).map(splitCsvLine).map((cells) => ({
-    date: cells[indexes.date]?.trim() ?? "",
-    item: cells[indexes.item]?.trim() ?? "",
-    channel: cells[indexes.channel]?.trim() ?? "",
-    amount: Number((cells[indexes.amount] ?? "").replace(/[^0-9.-]/g, "")),
-  })).filter((row) => row.date && row.item && row.channel && Number.isFinite(row.amount) && row.amount >= 0);
+  let missingChannelCount = 0;
+  const rows = lines.slice(headerLine + 1).map(splitCsvLine).map((cells) => {
+    const channel = cells[indexes.channel]?.trim();
+    if (!channel) missingChannelCount += 1;
+    return {
+      date: cells[indexes.date]?.trim() ?? "",
+      item: cells[indexes.item]?.trim() ?? "",
+      channel: channel || "채널 미입력",
+      amount: parseAmount(cells[indexes.amount] ?? ""),
+    };
+  }).filter((row) => row.date && row.item && Number.isFinite(row.amount) && row.amount >= 0);
 
   if (!rows.length) throw new Error("분석할 수 있는 데이터 행이 없습니다. 날짜·항목·채널·금액 값을 확인해 주세요.");
-  return rows;
+  return {
+    rows,
+    detectedHeaders: [headers[indexes.date], headers[indexes.item], headers[indexes.channel], headers[indexes.amount]],
+    missingChannelCount,
+  };
+}
+
+async function decodeCsvFile(file: File) {
+  const buffer = await file.arrayBuffer();
+  try {
+    return { text: new TextDecoder("utf-8", { fatal: true }).decode(buffer), encoding: "UTF-8" };
+  } catch {
+    return { text: new TextDecoder("euc-kr").decode(buffer), encoding: "한글 CSV(CP949)" };
+  }
 }
 
 function formatWon(value: number) {
@@ -114,6 +160,10 @@ function buildInsights(rows: DonationRow[]): Insight[] {
     monthlyTotals.set(month, (monthlyTotals.get(month) ?? 0) + row.amount);
   });
   const topChannel = [...channelCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const missingChannelCount = channelCounts.get("채널 미입력") ?? 0;
+  const topKnownChannel = [...channelCounts.entries()]
+    .filter(([channel]) => channel !== "채널 미입력")
+    .sort((a, b) => b[1] - a[1])[0] ?? topChannel;
   const topItem = [...itemTotals.entries()].sort((a, b) => b[1] - a[1])[0];
   const months = [...monthlyTotals.entries()].sort(([a], [b]) => a.localeCompare(b));
   const latest = months.at(-1)?.[1] ?? 0;
@@ -123,8 +173,10 @@ function buildInsights(rows: DonationRow[]): Insight[] {
   return [
     {
       eyebrow: "채널 집중도",
-      title: `${topChannel[0]} 유입을 우선 관리하세요`,
-      body: `${topChannel[0]} 채널이 전체 ${rows.length}건 중 ${topChannel[1]}건(${Math.round((topChannel[1] / rows.length) * 100)}%)으로 가장 많습니다. 이 채널의 후원 전환 문구와 재방문 동선을 먼저 점검해 보세요.`,
+      title: missingChannelCount > 0 ? `인입채널 ${missingChannelCount}건을 먼저 보완하세요` : `${topKnownChannel[0]} 유입을 우선 관리하세요`,
+      body: missingChannelCount > 0
+        ? `전체 ${rows.length}건 중 ${missingChannelCount}건(${Math.round((missingChannelCount / rows.length) * 100)}%)의 인입채널이 비어 있습니다. 채널 성과를 비교하기 전에 원본 시스템에서 이 값을 먼저 보완해 주세요.`
+        : `${topKnownChannel[0]} 채널이 전체 ${rows.length}건 중 ${topKnownChannel[1]}건(${Math.round((topKnownChannel[1] / rows.length) * 100)}%)으로 가장 많습니다. 이 채널의 후원 전환 문구와 재방문 동선을 먼저 점검해 보세요.`,
       tone: "orange",
     },
     {
@@ -150,6 +202,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [savedMessage, setSavedMessage] = useState("");
+  const [detectedInfo, setDetectedInfo] = useState<DetectedInfo | null>(null);
 
   const summary = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + row.amount, 0);
@@ -168,12 +221,13 @@ export default function Home() {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
 
-  const applyData = (text: string, name: string) => {
+  const applyData = (text: string, name: string, encoding = "UTF-8") => {
     try {
       const parsed = parseCsv(text);
-      setRows(parsed);
-      setInsights(buildInsights(parsed));
+      setRows(parsed.rows);
+      setInsights(buildInsights(parsed.rows));
       setFileName(name);
+      setDetectedInfo({ headers: parsed.detectedHeaders, encoding, missingChannelCount: parsed.missingChannelCount });
       setError("");
       setSavedMessage("");
     } catch (reason) {
@@ -181,6 +235,7 @@ export default function Home() {
       setRows([]);
       setInsights([]);
       setFileName("");
+      setDetectedInfo(null);
     }
   };
 
@@ -196,7 +251,8 @@ export default function Home() {
       setError("파일이 5MB를 넘습니다. 필요한 기간만 남겨 CSV를 나눈 뒤 다시 선택해 주세요.");
       return;
     }
-    applyData(await file.text(), file.name);
+    const decoded = await decodeCsvFile(file);
+    applyData(decoded.text, file.name, decoded.encoding);
   };
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -271,7 +327,7 @@ export default function Home() {
         <div className="upload-panel" aria-labelledby="upload-title">
           <div className="step-label">STEP 01</div>
           <h2 id="upload-title">데이터를 불러오세요</h2>
-          <p>필수 열: 납부일, 납부항목, 인입채널, 납부금액</p>
+          <p>열 이름을 직접 바꾸지 않아도 됩니다. 납부일·납부항목·인입채널·납부금액을 자동으로 찾습니다.</p>
           <div
             className={`dropzone ${isDragging ? "is-dragging" : ""}`}
             onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
@@ -283,13 +339,13 @@ export default function Home() {
             <div className="upload-icon" aria-hidden="true">↑</div>
             <strong>CSV 파일을 여기에 놓거나</strong>
             <button type="button" className="primary-button" onClick={() => inputRef.current?.click()}>파일 선택</button>
-            <small>CSV UTF-8 · 최대 5MB</small>
+            <small>UTF-8·한글 CSV(CP949) 자동 인식 · 최대 5MB</small>
           </div>
           <button className="sample-button" type="button" onClick={() => applyData(SAMPLE_CSV, "sample-donations.csv")}>샘플 데이터로 먼저 보기 <span>→</span></button>
           {error && <div className="error-message" role="alert" data-testid="upload-error"><strong>파일을 확인해 주세요</strong><span>{error}</span></div>}
           <details className="privacy-guide">
             <summary>민감정보를 안전하게 준비하는 방법</summary>
-            <p>가능하면 성명·연락처 열을 삭제하거나 마스킹하세요. 포함되어 있어도 이 앱은 해당 열을 읽거나 저장하지 않습니다. 원본 행은 브라우저를 닫으면 사라집니다.</p>
+            <p>가능하면 성명·연락처 열을 삭제하거나 마스킹하세요. 포함되어 있어도 이 앱은 해당 열을 분석·표시·저장하지 않습니다. 원본 행은 브라우저를 닫으면 사라집니다.</p>
           </details>
         </div>
       </section>
@@ -303,6 +359,19 @@ export default function Home() {
             </div>
             <button type="button" className="outline-button" onClick={() => inputRef.current?.click()}>다른 파일 분석</button>
           </div>
+
+          {detectedInfo && (
+            <div className="detected-columns" data-testid="detected-columns">
+              <div>
+                <strong>필수 열을 자동으로 찾았습니다</strong>
+                <span>{detectedInfo.encoding} · 성명·회원번호·계좌 등 다른 열은 분석하지 않습니다.</span>
+              </div>
+              <div className="detected-tags" aria-label="자동 인식된 필수 열">
+                {detectedInfo.headers.map((header) => <span key={header}>{header}</span>)}
+                {detectedInfo.missingChannelCount > 0 && <span className="notice">채널 미입력 {detectedInfo.missingChannelCount}건 별도 분류</span>}
+              </div>
+            </div>
+          )}
 
           <div className="metric-grid">
             <article className="metric-card featured"><span>납부 총액</span><strong>{formatWon(summary.total)}</strong><small>업로드 파일 전체 기준</small></article>
