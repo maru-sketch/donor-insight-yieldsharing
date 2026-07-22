@@ -7,17 +7,17 @@
 
 ## 기록
 
-### 2026-07-22 GitHub 배포 준비
-- **한 것**: 후원자 유지율과 1회 이상 실제 납입률을 포함한 최신 기능 커밋 `069b939`까지 구현·검증하고, 비공개 Sites 운영 버전 8에 배포했다.
+### 2026-07-22 GitHub 배포 완료
+- **한 것**: 후원자 유지율과 1회 이상 실제 납입률을 포함한 전체 구현·검증 이력을 `maru-sketch/donor-insight-yieldsharing` 저장소의 `main` 브랜치에 push했다.
 - **검증 상태**: REQ 12/12 PASS, TEST 3/3 TESTED, 자동검사 7/7, 제공 CSV 운영 업로드와 390px 모바일 화면 및 브라우저 오류 0건을 확인했다.
-- **GitHub 상태**: 로컬 저장소에 GitHub 원격이 아직 없으며, GitHub 웹과 Chrome 모두 로그아웃 상태라 저장소 생성과 push가 대기 중이다.
-- **다음**: 사용자가 GitHub에 로그인하면 `donor-insight-yieldsharing` 비공개 저장소를 만들고 현재 전체 커밋을 push한 뒤 아래 최종 검증 블록의 저장·배포 근거를 GitHub URL로 갱신한다.
+- **저장 범위**: 저장소는 비공개이며 원본 후원자 CSV는 포함하지 않았다. 코드·기획 계약·검증 기록과 예시 데이터만 저장했다.
+- **결과**: GitHub https://github.com/maru-sketch/donor-insight-yieldsharing · 운영 앱 https://donor-insight-yieldsharing.csmerry.chatgpt.site
 
 <!-- orange-build:final-verification -->
 ### 2026-07-22 최종 검증
 - **최종 판정**: 완료 — REQ 12/12 PASS · TEST 3/3 TESTED
 - **확인한 결과**: UTF-8·한글 CSV(CP949)에서 필수 열을 자동 연결해 요약·차트·전략 문구와 월별 × 인입채널 교차표를 표시한다. 납부일·납부항목·인입채널·납부금액 중 보고 싶은 열만 고를 수 있고, 회원번호·시작년월·납부종료일이 있으면 평균 후원 유지율·평균 후원기간·중단 후원자 수를, 회원번호·납부여부가 있으면 1회 이상 납입률·실제 납입자 수·미납입 인입 수도 보여 준다. 회원번호와 납부여부는 이 계산에만 휘발성으로 사용한다.
 - **검증 근거**: 제공 한글 CSV 138건에서 2026.07.22 기준 고유 후원자 133명 중 116명 유지·17명 중단으로 유지율 87.2%, 평균 후원기간 3.1개월을 독립 집계와 화면에서 대조했다. 같은 파일의 납부여부 Y 121건·N 17건을 후원자별로 묶어 116명이 1회 이상 납입, 17명이 아직 미납입한 인입으로 납입률 87.2%임을 화면에서 확인했다. 계산 열이 없는 CSV는 필요한 열을 안내하면서 기존 분석을 유지했다. 자동검사 7/7, 390px 반응형 및 콘솔 오류 0건 확인. 기존 TEST-02 TXT 오류·재시도와 TEST-03 문구 수정·기기 저장 증거 유지
-- **저장·배포**: 비공개 Sites 운영 배포 성공 · 새 요청에서 HTTP 200과 핵심 화면 확인 · https://donor-insight-yieldsharing.csmerry.chatgpt.site
+- **저장·배포**: GitHub PRIVATE 저장소 `main` push 확인 · https://github.com/maru-sketch/donor-insight-yieldsharing · 비공개 Sites 운영 버전 8 배포 및 핵심 화면 확인 · https://donor-insight-yieldsharing.csmerry.chatgpt.site
 - **아직 증명하지 못한 것**: 실제 업무 시간 50% 단축은 운영 도입 전후 측정이 필요한 P3 후속 지표
 <!-- /orange-build:final-verification -->
