@@ -111,10 +111,8 @@ function parseCsv(text: string): ParsedCsv {
     .map(([key]) => ({ date: "납부일", item: "납부항목", channel: "인입채널", amount: "납부금액" })[key as keyof typeof indexes]);
   if (missing.length) throw new Error(`필수 열을 찾지 못했습니다: ${missing.join(", ")}. 열 이름을 확인해 주세요.`);
 
-  let missingChannelCount = 0;
   const rows = lines.slice(headerLine + 1).map(splitCsvLine).map((cells) => {
     const channel = cells[indexes.channel]?.trim();
-    if (!channel) missingChannelCount += 1;
     return {
       date: cells[indexes.date]?.trim() ?? "",
       item: cells[indexes.item]?.trim() ?? "",
@@ -122,6 +120,7 @@ function parseCsv(text: string): ParsedCsv {
       amount: parseAmount(cells[indexes.amount] ?? ""),
     };
   }).filter((row) => row.date && row.item && Number.isFinite(row.amount) && row.amount >= 0);
+  const missingChannelCount = rows.filter((row) => row.channel === "채널 미입력").length;
 
   if (!rows.length) throw new Error("분석할 수 있는 데이터 행이 없습니다. 날짜·항목·채널·금액 값을 확인해 주세요.");
   return {
