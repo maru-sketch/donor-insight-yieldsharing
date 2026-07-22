@@ -7,6 +7,12 @@
 
 ## 기록
 
+### 2026-07-22 GitHub 배포 준비
+- **한 것**: 후원자 유지율과 1회 이상 실제 납입률을 포함한 최신 기능 커밋 `069b939`까지 구현·검증하고, 비공개 Sites 운영 버전 8에 배포했다.
+- **검증 상태**: REQ 12/12 PASS, TEST 3/3 TESTED, 자동검사 7/7, 제공 CSV 운영 업로드와 390px 모바일 화면 및 브라우저 오류 0건을 확인했다.
+- **GitHub 상태**: 로컬 저장소에 GitHub 원격이 아직 없으며, GitHub 웹과 Chrome 모두 로그아웃 상태라 저장소 생성과 push가 대기 중이다.
+- **다음**: 사용자가 GitHub에 로그인하면 `donor-insight-yieldsharing` 비공개 저장소를 만들고 현재 전체 커밋을 push한 뒤 아래 최종 검증 블록의 저장·배포 근거를 GitHub URL로 갱신한다.
+
 <!-- orange-build:final-verification -->
 ### 2026-07-22 최종 검증
 - **최종 판정**: 완료 — REQ 12/12 PASS · TEST 3/3 TESTED
