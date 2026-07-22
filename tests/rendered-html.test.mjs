@@ -33,5 +33,8 @@ test("keeps the TEST-01~03 interaction contracts in the product source", async (
   assert.match(page, /수정 문구 저장/);
   assert.match(page, /donor-insight-draft/);
   assert.match(page, /원본 행은 브라우저를 닫으면 사라집니다/);
+  assert.match(page, /new Blob/);
+  assert.match(page, /후원자-데이터-인사이트-리포트\.txt/);
+  assert.match(page, /document\.body\.appendChild\(anchor\)/);
+  assert.match(page, /anchor\.click\(\)/);
 });
-
