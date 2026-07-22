@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
-import { calculateRetention } from "./retention.mjs";
+import { calculatePaymentConversion, calculateRetention } from "./retention.mjs";
 
 type DonationRow = {
   date: string;
@@ -13,13 +13,20 @@ type DonationRow = {
   endDate?: string;
 };
 
+type PaymentInflowRow = {
+  memberKey: string;
+  paymentStatus: string;
+};
+
 type SafeColumnKey = "date" | "item" | "channel" | "amount";
 
 type ParsedCsv = {
   rows: DonationRow[];
+  paymentRows: PaymentInflowRow[];
   detectedHeaders: string[];
   missingChannelCount: number;
   retentionReady: boolean;
+  paymentReady: boolean;
 };
 
 type DetectedInfo = {
@@ -27,6 +34,7 @@ type DetectedInfo = {
   encoding: string;
   missingChannelCount: number;
   retentionReady: boolean;
+  paymentReady: boolean;
 };
 
 type Insight = {
@@ -36,19 +44,19 @@ type Insight = {
   tone: "orange" | "green" | "ink";
 };
 
-const SAMPLE_CSV = `회원번호,시작년월,납부종료일,납부일,납부항목,인입채널,납부금액
-S001,2026-01,,2026-01-12,정기후원,홈페이지,30000
-S002,2026-01,2026-03-31,2026-01-18,일시후원,SNS,50000
-S001,2026-01,,2026-02-03,정기후원,홈페이지,30000
-S003,2026-02,,2026-02-14,일시후원,행사,120000
-S001,2026-01,,2026-03-05,정기후원,홈페이지,30000
-S004,2026-03,,2026-03-19,기업후원,소개,300000
-S001,2026-01,,2026-04-02,정기후원,홈페이지,30000
-S005,2026-04,2026-05-10,2026-04-11,일시후원,SNS,70000
-S001,2026-01,,2026-05-06,정기후원,홈페이지,30000
-S006,2026-05,,2026-05-22,일시후원,SNS,100000
-S001,2026-01,,2026-06-08,정기후원,홈페이지,30000
-S007,2026-06,,2026-06-20,기업후원,소개,450000`;
+const SAMPLE_CSV = `회원번호,납부여부,시작년월,납부종료일,납부일,납부항목,인입채널,납부금액
+S001,Y,2026-01,,2026-01-12,정기후원,홈페이지,30000
+S002,Y,2026-01,2026-03-31,2026-01-18,일시후원,SNS,50000
+S001,Y,2026-01,,2026-02-03,정기후원,홈페이지,30000
+S003,Y,2026-02,,2026-02-14,일시후원,행사,120000
+S001,Y,2026-01,,2026-03-05,정기후원,홈페이지,30000
+S004,Y,2026-03,,2026-03-19,기업후원,소개,300000
+S001,Y,2026-01,,2026-04-02,정기후원,홈페이지,30000
+S005,Y,2026-04,2026-05-10,2026-04-11,일시후원,SNS,70000
+S001,Y,2026-01,,2026-05-06,정기후원,홈페이지,30000
+S006,N,2026-05,,2026-05-22,일시후원,SNS,100000
+S001,Y,2026-01,,2026-06-08,정기후원,홈페이지,30000
+S007,Y,2026-06,,2026-06-20,기업후원,소개,450000`;
 
 const HEADER_ALIASES = {
   date: ["납부일", "납부일자", "결제일", "date"],
@@ -58,6 +66,7 @@ const HEADER_ALIASES = {
   memberKey: ["회원번호", "후원자번호", "후원자id", "memberid", "donorid"],
   startDate: ["시작년월", "후원시작일", "후원시작년월", "가입일", "startdate"],
   endDate: ["납부종료일", "후원중단일", "후원종료일", "종료년월", "enddate"],
+  paymentStatus: ["납부여부", "납입여부", "결제여부", "후원금납부여부", "paymentstatus", "paid"],
 };
 
 const COLUMN_OPTIONS: { key: SafeColumnKey; label: string }[] = [
@@ -131,12 +140,17 @@ function parseCsv(text: string): ParsedCsv {
     startDate: findColumn(headers, HEADER_ALIASES.startDate),
     endDate: findColumn(headers, HEADER_ALIASES.endDate),
   };
+  const paymentIndexes = {
+    memberKey: retentionIndexes.memberKey,
+    paymentStatus: findColumn(headers, HEADER_ALIASES.paymentStatus),
+  };
   const missing = Object.entries(indexes)
     .filter(([, index]) => index < 0)
     .map(([key]) => ({ date: "납부일", item: "납부항목", channel: "인입채널", amount: "납부금액" })[key as keyof typeof indexes]);
   if (missing.length) throw new Error(`필수 열을 찾지 못했습니다: ${missing.join(", ")}. 열 이름을 확인해 주세요.`);
 
-  const rows = lines.slice(headerLine + 1).map(splitCsvLine).map((cells) => {
+  const dataCells = lines.slice(headerLine + 1).map(splitCsvLine);
+  const rows = dataCells.map((cells) => {
     const channel = cells[indexes.channel]?.trim();
     return {
       date: cells[indexes.date]?.trim() ?? "",
@@ -148,14 +162,22 @@ function parseCsv(text: string): ParsedCsv {
       endDate: retentionIndexes.endDate >= 0 ? cells[retentionIndexes.endDate]?.trim() ?? "" : "",
     };
   }).filter((row) => row.date && row.item && Number.isFinite(row.amount) && row.amount >= 0);
+  const paymentRows = Object.values(paymentIndexes).every((index) => index >= 0)
+    ? dataCells.map((cells) => ({
+      memberKey: cells[paymentIndexes.memberKey]?.trim() ?? "",
+      paymentStatus: cells[paymentIndexes.paymentStatus]?.trim() ?? "",
+    })).filter((row) => row.memberKey)
+    : [];
   const missingChannelCount = rows.filter((row) => row.channel === "채널 미입력").length;
 
   if (!rows.length) throw new Error("분석할 수 있는 데이터 행이 없습니다. 날짜·항목·채널·금액 값을 확인해 주세요.");
   return {
     rows,
+    paymentRows,
     detectedHeaders: [headers[indexes.date], headers[indexes.item], headers[indexes.channel], headers[indexes.amount]],
     missingChannelCount,
     retentionReady: Object.values(retentionIndexes).every((index) => index >= 0),
+    paymentReady: Object.values(paymentIndexes).every((index) => index >= 0),
   };
 }
 
@@ -238,6 +260,7 @@ function buildInsights(rows: DonationRow[]): Insight[] {
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<DonationRow[]>([]);
+  const [paymentRows, setPaymentRows] = useState<PaymentInflowRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -253,6 +276,7 @@ export default function Home() {
   }, [rows]);
 
   const retention = useMemo(() => calculateRetention(rows), [rows]);
+  const paymentConversion = useMemo(() => calculatePaymentConversion(paymentRows), [paymentRows]);
 
   const monthly = useMemo(() => {
     const map = new Map<string, number>();
@@ -306,15 +330,17 @@ export default function Home() {
     try {
       const parsed = parseCsv(text);
       setRows(parsed.rows);
+      setPaymentRows(parsed.paymentRows);
       setInsights(buildInsights(parsed.rows));
       setFileName(name);
-      setDetectedInfo({ headers: parsed.detectedHeaders, encoding, missingChannelCount: parsed.missingChannelCount, retentionReady: parsed.retentionReady });
+      setDetectedInfo({ headers: parsed.detectedHeaders, encoding, missingChannelCount: parsed.missingChannelCount, retentionReady: parsed.retentionReady, paymentReady: parsed.paymentReady });
       setError("");
       setSavedMessage("");
       setDataPage(0);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "파일을 분석하지 못했습니다.");
       setRows([]);
+      setPaymentRows([]);
       setInsights([]);
       setFileName("");
       setDetectedInfo(null);
@@ -326,6 +352,7 @@ export default function Home() {
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setError("CSV 파일만 업로드할 수 있습니다. 엑셀 파일은 ‘CSV UTF-8’ 형식으로 저장한 뒤 다시 선택해 주세요.");
       setRows([]);
+      setPaymentRows([]);
       setInsights([]);
       return;
     }
@@ -364,6 +391,11 @@ export default function Home() {
         `평균 후원 유지율: ${retention.retentionRate}%`,
         `평균 후원기간: ${retention.averageMonths}개월`,
         `유지율 기준일: ${retention.asOf}`,
+      ] : []),
+      ...(paymentConversion ? [
+        `1회 이상 납입률: ${paymentConversion.paymentRate}%`,
+        `실제 납입 후원자: ${paymentConversion.paidDonors}명 / 인입 후원자: ${paymentConversion.acquiredDonors}명`,
+        `아직 납입하지 않은 인입: ${paymentConversion.unpaidDonors}명`,
       ] : []),
       "",
       ...insights.flatMap((insight, index) => [`${index + 1}. ${insight.title}`, insight.body, ""]),
@@ -414,7 +446,7 @@ export default function Home() {
         <div className="upload-panel" aria-labelledby="upload-title">
           <div className="step-label">STEP 01</div>
           <h2 id="upload-title">데이터를 불러오세요</h2>
-          <p>열 이름을 직접 바꾸지 않아도 됩니다. 납부일·납부항목·인입채널·납부금액을 자동으로 찾습니다. 회원번호·시작년월·납부종료일이 있으면 유지율도 계산합니다.</p>
+          <p>열 이름을 직접 바꾸지 않아도 됩니다. 납부일·납부항목·인입채널·납부금액을 자동으로 찾습니다. 회원번호·시작년월·납부종료일이 있으면 유지율을, 회원번호·납부여부가 있으면 실제 납입률을 계산합니다.</p>
           <div
             className={`dropzone ${isDragging ? "is-dragging" : ""}`}
             onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
@@ -456,6 +488,7 @@ export default function Home() {
               <div className="detected-tags" aria-label="자동 인식된 필수 열">
                 {detectedInfo.headers.map((header) => <span key={header}>{header}</span>)}
                 {detectedInfo.retentionReady && <span>유지율 계산 열 확인</span>}
+                {detectedInfo.paymentReady && <span>납입률 계산 열 확인</span>}
                 {detectedInfo.missingChannelCount > 0 && <span className="notice">채널 미입력 {detectedInfo.missingChannelCount}건 별도 분류</span>}
               </div>
             </div>
@@ -498,6 +531,35 @@ export default function Home() {
               </>
             ) : (
               <p className="retention-empty">유지율을 계산하려면 CSV에 회원번호·시작년월·납부종료일 열이 필요합니다. 다른 분석 결과는 그대로 사용할 수 있습니다.</p>
+            )}
+          </article>
+
+          <article className="payment-rate-card" data-testid="payment-rate-summary">
+            <div className="card-heading">
+              <div><span>인입 품질 분석</span><h3>실제 납입 전환 현황</h3></div>
+              <span className="unit">고유 후원자 기준</span>
+            </div>
+            {paymentConversion ? (
+              <>
+                <div className="payment-rate-grid">
+                  <div className="payment-rate-primary">
+                    <span>1회 이상 납입률</span>
+                    <strong>{paymentConversion.paymentRate}%</strong>
+                    <small>실제 납입 {paymentConversion.paidDonors}명 / 인입 {paymentConversion.acquiredDonors}명</small>
+                  </div>
+                  <div className="payment-rate-stat">
+                    <span>아직 납입하지 않은 인입</span>
+                    <strong>{paymentConversion.unpaidDonors}명</strong>
+                    <small>납부여부가 모두 N인 고유 후원자</small>
+                  </div>
+                </div>
+                <div className="payment-rate-track" role="img" aria-label={`1회 이상 납입률 ${paymentConversion.paymentRate}%`}>
+                  <div style={{ width: `${paymentConversion.paymentRate}%` }} />
+                </div>
+                <p className="payment-rate-formula">납입률 = 납부여부가 ‘Y’인 기록이 한 번 이상 있는 고유 후원자 ÷ 인입된 고유 후원자. 회원번호와 납부여부는 이 계산에만 사용하며 화면의 원본 표에는 표시하지 않습니다.</p>
+              </>
+            ) : (
+              <p className="payment-rate-empty">납입률을 계산하려면 CSV에 회원번호·납부여부 열이 필요합니다. 납부여부는 실제 납입이면 Y, 아직 납입하지 않았다면 N으로 준비해 주세요. 다른 분석 결과는 그대로 사용할 수 있습니다.</p>
             )}
           </article>
 

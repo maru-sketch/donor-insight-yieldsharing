@@ -87,6 +87,20 @@ button { cursor: pointer; }
 .retention-formula, .retention-empty { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
 .retention-empty { padding: 18px 20px; border-radius: 4px; background: rgba(255,255,255,.7); }
 
+.payment-rate-card { margin-bottom: 14px; padding: 28px; border: 1px solid #f0c8b8; border-radius: 5px; background: linear-gradient(120deg, #fffaf7, var(--orange-soft)); }
+.payment-rate-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; margin-top: 24px; }
+.payment-rate-primary, .payment-rate-stat { min-height: 138px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #efd4c8; border-radius: 4px; background: rgba(255,255,255,.82); }
+.payment-rate-primary { background: var(--orange); color: white; border-color: var(--orange); }
+.payment-rate-primary span, .payment-rate-stat span { color: var(--muted); font-size: 12px; font-weight: 750; }
+.payment-rate-primary span { color: #ffe0d3; }
+.payment-rate-primary strong, .payment-rate-stat strong { font-size: clamp(27px, 3.2vw, 42px); letter-spacing: -.045em; }
+.payment-rate-primary small, .payment-rate-stat small { color: #89958f; font-size: 11px; line-height: 1.45; }
+.payment-rate-primary small { color: #ffe0d3; }
+.payment-rate-track { height: 9px; margin-top: 18px; overflow: hidden; border-radius: 999px; background: #eedfd8; }
+.payment-rate-track div { height: 100%; border-radius: inherit; background: var(--green); }
+.payment-rate-formula, .payment-rate-empty { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.payment-rate-empty { padding: 18px 20px; border-radius: 4px; background: rgba(255,255,255,.72); }
+
 .chart-grid { display: grid; grid-template-columns: 1.35fr .85fr; gap: 14px; }
 .chart-card { min-height: 410px; padding: 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); }
 .card-heading { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
@@ -174,6 +188,7 @@ button { cursor: pointer; }
   .metric-grid, .chart-grid { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: repeat(3, 1fr); }
   .retention-grid { grid-template-columns: repeat(3, 1fr); }
+  .payment-rate-grid { grid-template-columns: 1.3fr 1fr; }
   .insight-grid { grid-template-columns: 1fr; }
   .insight-card { min-height: 300px; }
   .insight-heading { align-items: flex-start; flex-direction: column; }
@@ -195,8 +210,8 @@ button { cursor: pointer; }
   .detected-columns { align-items: flex-start; flex-direction: column; }
   .detected-tags { justify-content: flex-start; }
   .metric-grid { grid-template-columns: 1fr; }
-  .retention-card { padding: 20px; }
-  .retention-grid { grid-template-columns: 1fr; }
+  .retention-card, .payment-rate-card { padding: 20px; }
+  .retention-grid, .payment-rate-grid { grid-template-columns: 1fr; }
   .metric-card { min-height: 132px; }
   .chart-card { padding: 20px; min-height: 380px; overflow: hidden; }
   .monthly-channel-card { min-height: 0; }

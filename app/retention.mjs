@@ -63,3 +63,30 @@ export function calculateRetention(rows) {
     averageMonths: Math.round((durations.reduce((sum, value) => sum + value, 0) / eligibleDonors) * 10) / 10,
   };
 }
+
+const PAID_STATUSES = new Set(["y", "yes", "true", "1", "예", "납부", "납입", "완료", "성공", "paid"]);
+
+/**
+ * 납부여부는 고유 후원자별 1회 이상 납입 여부를 계산하는 데만 사용한다.
+ * 반환값에는 회원번호나 원본 행을 포함하지 않는다.
+ */
+export function calculatePaymentConversion(rows) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const memberKey = String(row.memberKey ?? "").trim();
+    if (!memberKey) return;
+    const statuses = groups.get(memberKey) ?? [];
+    statuses.push(String(row.paymentStatus ?? "").trim().toLowerCase());
+    groups.set(memberKey, statuses);
+  });
+
+  const acquiredDonors = groups.size;
+  if (!acquiredDonors) return null;
+  const paidDonors = [...groups.values()].filter((statuses) => statuses.some((status) => PAID_STATUSES.has(status))).length;
+  return {
+    acquiredDonors,
+    paidDonors,
+    unpaidDonors: acquiredDonors - paidDonors,
+    paymentRate: Math.round((paidDonors / acquiredDonors) * 1_000) / 10,
+  };
+}

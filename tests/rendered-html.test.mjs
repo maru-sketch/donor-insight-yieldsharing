@@ -98,3 +98,26 @@ test("calculates donor retention from start and stop dates without exposing dono
   assert.match(page, /회원번호는 중복 후원자 구분에만/);
   assert.doesNotMatch(page, /\{row\.memberKey\}/);
 });
+
+test("calculates the share of acquired donors who paid at least once", async () => {
+  const { calculatePaymentConversion } = await import("../app/retention.mjs");
+  const payment = calculatePaymentConversion([
+    { memberKey: "A", paymentStatus: "Y" },
+    { memberKey: "A", paymentStatus: "N" },
+    { memberKey: "B", paymentStatus: "N" },
+    { memberKey: "C", paymentStatus: "납부" },
+  ]);
+
+  assert.equal(payment.acquiredDonors, 3);
+  assert.equal(payment.paidDonors, 2);
+  assert.equal(payment.unpaidDonors, 1);
+  assert.equal(payment.paymentRate, 66.7);
+  assert.equal(calculatePaymentConversion([{ memberKey: "", paymentStatus: "Y" }]), null);
+
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /data-testid="payment-rate-summary"/);
+  assert.match(page, /1회 이상 납입률/);
+  assert.match(page, /납부여부가 ['‘]Y['’]인 기록이 한 번 이상 있는 고유 후원자/);
+  assert.match(page, /납입률 계산 열 확인/);
+  assert.doesNotMatch(page, /\{row\.paymentStatus\}/);
+});
