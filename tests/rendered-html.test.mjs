@@ -49,3 +49,12 @@ test("auto-detects the supplied Korean CSV shape without storing private columns
   assert.match(page, /data-testid="detected-columns"/);
   assert.doesNotMatch(page, /회원명.*DonationRow|회원번호.*DonationRow|입금계좌.*DonationRow/s);
 });
+
+test("shows monthly acquisition counts broken down by channel", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /data-testid="monthly-channel-matrix"/);
+  assert.match(page, /월별 × 인입채널/);
+  assert.match(page, /monthChannelRows/);
+  assert.match(page, /monthYearLabel\(month\)/);
+  assert.match(page, /월 합계/);
+});

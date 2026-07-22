@@ -148,6 +148,11 @@ function monthLabel(value: string) {
   return match ? `${Number(match[2])}월` : value.slice(0, 7);
 }
 
+function monthYearLabel(value: string) {
+  const match = value.match(/(\d{4})[-/.](\d{1,2})/);
+  return match ? `${match[1]}.${String(Number(match[2])).padStart(2, "0")}` : value.slice(0, 7);
+}
+
 function buildInsights(rows: DonationRow[]): Insight[] {
   const channelCounts = new Map<string, number>();
   const itemTotals = new Map<string, number>();
@@ -219,6 +224,28 @@ export default function Home() {
     rows.forEach((row) => map.set(row.channel, (map.get(row.channel) ?? 0) + 1));
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
+
+  const monthChannelRows = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    rows.forEach((row) => {
+      const month = row.date.slice(0, 7);
+      const monthChannels = map.get(month) ?? new Map<string, number>();
+      monthChannels.set(row.channel, (monthChannels.get(row.channel) ?? 0) + 1);
+      map.set(month, monthChannels);
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, counts]) => ({
+        month,
+        counts,
+        total: [...counts.values()].reduce((sum, count) => sum + count, 0),
+      }));
+  }, [rows]);
+
+  const maxMonthChannelCount = Math.max(
+    ...monthChannelRows.flatMap(({ counts }) => channels.map(([channel]) => counts.get(channel) ?? 0)),
+    1,
+  );
 
   const applyData = (text: string, name: string, encoding = "UTF-8") => {
     try {
@@ -404,6 +431,47 @@ export default function Home() {
               </div>
             </article>
           </div>
+
+          <article className="chart-card monthly-channel-card" data-testid="monthly-channel-matrix">
+            <div className="card-heading">
+              <div><span>교차 분석</span><h3>월별 × 인입채널</h3></div>
+              <span className="unit">진할수록 인입 건수가 많음</span>
+            </div>
+            <p className="matrix-description">월마다 어떤 채널에서 몇 건이 들어왔는지 비교합니다. 가로로 움직이면 모든 채널을 볼 수 있습니다.</p>
+            <div className="matrix-scroll">
+              <table className="channel-matrix">
+                <caption className="sr-only">월별 인입채널별 후원 건수</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">월</th>
+                    {channels.map(([channel]) => <th scope="col" key={channel}>{channel}</th>)}
+                    <th scope="col">월 합계</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthChannelRows.map(({ month, counts, total }) => (
+                    <tr key={month}>
+                      <th scope="row">{monthYearLabel(month)}</th>
+                      {channels.map(([channel]) => {
+                        const count = counts.get(channel) ?? 0;
+                        const intensity = count / maxMonthChannelCount;
+                        return (
+                          <td
+                            key={channel}
+                            aria-label={`${monthYearLabel(month)} ${channel} ${count}건`}
+                            style={{ backgroundColor: count ? `rgba(46, 113, 98, ${0.12 + intensity * 0.7})` : undefined }}
+                          >
+                            {count ? `${count}건` : "–"}
+                          </td>
+                        );
+                      })}
+                      <td className="matrix-total">{total}건</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
 
           <section className="insight-section" aria-labelledby="insight-title">
             <div className="section-heading insight-heading">

@@ -94,6 +94,16 @@ button { cursor: pointer; }
 .channel-track { height: 13px; border-radius: 2px; background: #eeeeea; overflow: hidden; }
 .channel-fill { height: 100%; border-radius: 2px; }
 .tone-1 { background: var(--orange); } .tone-2 { background: var(--green); } .tone-3 { background: var(--yellow); }
+.monthly-channel-card { min-height: 0; margin-top: 14px; }
+.matrix-description { margin: 10px 0 22px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.matrix-scroll { width: 100%; overflow-x: auto; padding-bottom: 4px; scrollbar-color: #b8c7c0 transparent; }
+.channel-matrix { width: 100%; min-width: 720px; border-collapse: separate; border-spacing: 5px; table-layout: fixed; }
+.channel-matrix th, .channel-matrix td { min-width: 84px; padding: 13px 10px; border-radius: 3px; text-align: center; font-size: 12px; }
+.channel-matrix thead th { color: var(--muted); background: #efeee9; font-weight: 750; }
+.channel-matrix tbody th { position: sticky; left: 0; z-index: 1; color: var(--ink); background: var(--white); border: 1px solid var(--line); font-weight: 800; }
+.channel-matrix tbody td { color: var(--ink); background: #f1f1ed; font-weight: 800; }
+.channel-matrix tbody td[style] { color: white; text-shadow: 0 1px 1px rgba(24,58,53,.2); }
+.channel-matrix .matrix-total { background: var(--orange-soft); color: #9d442c; text-shadow: none; }
 
 .insight-section { margin-top: 90px; }
 .insight-heading { align-items: flex-end; }
@@ -150,6 +160,7 @@ button { cursor: pointer; }
   .metric-grid { grid-template-columns: 1fr; }
   .metric-card { min-height: 132px; }
   .chart-card { padding: 20px; min-height: 380px; overflow: hidden; }
+  .monthly-channel-card { min-height: 0; }
   .bar-chart { gap: 7px; height: 280px; }
   .bar-value { font-size: 9px; }
   .bar-label { font-size: 10px; }
